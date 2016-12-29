@@ -1,0 +1,285 @@
+1. Language of Linux
+    * C Primer (recommended before class)
+    * Assembly Primer (reading only)
+        * Registers
+        * cdecl
+    * ELF Format
+        * ELF-Walkthrough.png
+        * readelf
+        * objdump
+        * nm
+    * Reverse Engineering Tools
+        * file
+        * objdump
+        * strings
+        * strace, ltrace
+        * shellnoob
+        * hex editor
+    * GDB
+        * break
+        * run
+        * continue
+        * x
+        * nexti
+        * stepi
+        * voltron
+    * tut0-func
+
+==== C Primer ====
+Maybe we can send an email saying to brush up on C beforehand? The first
+session is pretty packed.
+
+==== Assembly Primer ====
+This will go over registers, mov, push, pop, lea, add, sub, imul, idiv,
+and the cdecl calling convention.
+
+http://www.cs.virginia.edu/~evans/cs216/guides/x86.html
+
+==== ELF Format ====
+Today is about learning how programs are created and executed in precise
+detail. Write the following program in your text editor of choice, and save it
+as addder.c:
+
+#include <stdio.h>
+
+int sum(int a, int b) {
+    return a + b;
+}
+
+int main(void) {
+    int a, b, c;
+
+    printf("Enter two numbers: ");
+    scanf("%d %d", &a, &b);
+
+    c = sum(a, b);
+    printf("The sum of those numbers is %d\n", c);
+
+    return 0;
+}
+
+Then run "gcc -m32 -o adder adder.c" from the directory where you saved the
+program.  The result is a binary file called adder. You may run it with
+./adder if you wish.
+
+If you run "cat adder", you'll see a blob of bizarre characters and whitespace.
+This is your terminal doing its best to interpret binary data as text
+characters. You'll notice that it doesn't do a very good job, although you can
+still make out a few things like "ELF" at the beginning and "Enter two
+numbers". Our new goal is to understand the structure of this blob.
+
+The reason cat does such a bad job is because it's interpreting binary data as
+ASCII. To examine the compiled program properly we need a way to view it as
+individual bytes. To do that, we use a hex dumper. We will use xxd.
+
+Run "xxd -g 1 adder | less" and take a look at ELF-Walkthrough.png.  This
+picture breaks down the ELF format into 3 parts, a top header, sections, and
+a bottom header. The first few bytes of our program contain the following
+information:
+
+EI_MAG
+7F 45 4C 46
+0x7F identifies the binary as an ELF file. 0x45 0x4C 0x46 is the hexadecimal
+representation of the characters "ELF".
+
+EI_CLASS, EI_DATA
+02 01
+The 0x02 signifies a 64-bit program, and the 0x01 signifies that the ELF's data
+is stored in little-endian byte order.
+
+EI_VERSION
+01 00 00 00 00
+This field specifies the ELF header version number. There is currently only one
+version, so this value must be 1.
+
+(empty bytes)
+00 00 00 00 00
+
+e_type
+02 00
+This field specifies the ELF file type. The 0x02 means this file is executable.
+
+e_machine
+3E 00
+This field specifies the required architecture for this program. 0x3E
+corresponds to AMD x86-64 architecture.
+
+e_version
+01 00 00 00
+This field specifies the object file version. There is currently only one
+version, so this value must be 1.
+
+e_entry (0x00400500)
+00 05 40 00 00 00 00 00
+This field specifies the memory address from which the program starts
+executing. Unlike the example in ELF-Walkthrough.png, it is 8 bytes (64 bits)
+long, as specified in EI_CLASS.
+
+We now know at a high level what happens when gcc compiles a C program. It
+simply creates a new file, identifies it as an ELF binary, writes in all this
+information in the ELF format, then writes in the machine code equivalent of
+the C code being compiled. We'll come back to machine code later. For now we
+will talk about the main components of an ELF binary: symbols, sections, and
+segments.
+
+Symbols are the "functions" of the binary. They map names (like printf or sum)
+to locations in memory. You can view the symbol table for adder by running
+readelf --symbols adder or nm adder. You'll see that the symbol for printf is
+listed in a different section than the ones for main and sum. That's because
+those functions reside in shared libraries, not within the binary itself (if
+you want you can have them reside in the binary with gcc's -static flag, but
+this has drawbacks).
+
+Symbols are composed into sections, each of which serves a different purpose.
+For instance the .text section contains the program instructions, and .rodata
+contains read-only data such as the strings we hard-coded into the adder. You
+can view the program's sections with readelf --sections adder or
+objdump --section-headers adder. You can also see the hard-coded strings by
+looking at the .text section in objdump --full-contents adder
+
+Sections are further composed into segments, which are used at runtime to
+separate different parts of the program into memory. You can view the program's
+segments with readelf --segments adder.
+
+http://imgur.com/gallery/m6kL4Lv (ELF-Walkthrough.png)
+https://jvns.ca/blog/2014/09/06/how-to-read-an-executable/
+http://nairobi-embedded.org/040_elf_sec_seg_vma_mappings.html
+http://nairobi-embedded.org/004_elf_format.html
+
+==== Reverse Engineering Tools ====
+Now that you have some knowledge of what you're dealing with, we can introduce
+the reverse engineering tools you have at your disposal.
+
+Our reversing tool is the humble file command. This command simply prints
+information on the type of file it is called on. You can run file on adder to
+see that it is a 32-bit ELF excutable. While it may be simple, don't forget
+about this command as a key to understanding what sort of file you're up
+against.
+
+We've seen our next reversing tool already: objdump. This simple yet useful
+tool allows us to see the machine code of any binary, and in theory is all we
+need to reverse engineer any program. It's output tends to be rather abstruse
+however, so we will need other methods as our programs become more complex.
+
+Our next plan of attack is to see what we can learn just by reading it off the
+binary, like the hard-coded strings in the .rodata section of the adder. The
+tool for this job is called strings. You can run strings adder to see the ascii
+strings it contains.
+
+We can also learn about a binary through the functions it calls. ltrace will
+execute a program while simultaneously dumping information on the dynamic
+library calls it makes, and strace does the same with system calls. You can try
+them both on adder to see how they work.
+
+Since the ELF binary contains source code, why not simply overwrite it? We can
+use a hex editor edit files at the byte level, which means we can overwrite
+instructions even after a program has been compiled. Run "objdump -M intel -d
+adder" and search for the sum symbol. You'll notice that the two numbers are
+added with "add eax,edx" which is represented as 01 d0 in memory. 
+Suppose we wanted a subtractor instead. If we replace the add instruction with
+a subtract one, the arguments will be subtracted instead.
+
+We need to find the memory representation (or opcode) for "sub eax,edx". We
+will use a tool called rasm2. Run "rasm2 'sub eax, edx' to get the desired
+opcode. The opcode for "sub eax,edx" is 29 d0.
+
+Now we need to edit the binary. Just as objdump is used to view binaries at a
+byte level, a hex editor is used to edit files at the byte level. Open adder in
+wxHexEditor and find the bytes representing the add instruction (compare
+against objdump to ensure you're editing the right bytes). Then replace them
+with 29 d0. Save the new file and make it executable with chmod +x <file>. Run
+the new file and see the result.
+
+This brings us to the most powerful tool in the reverse engineer's toolkit -
+the debugger. Debuggers allow us to step through a program's execution one
+instruction at a time, all while viewing and even editing memory and register
+contents.
+
+==== GDB ====
+Now for a quick walkthrough of the GNU Debugger, or GDB for short. Run "gdb
+./adder". It will seem like nothing has happened, because nothing really has.
+gdb has loaded the program into memory and that's about it. But under gdb you
+can control the flow of the program's execution. To start out, run disassemble
+main (or disas main for short). This produces a objdump-like view of main(). To
+view the corresponding opcodes as well, run "dissasemble /r main".
+
+Our next task is to pause execution when the program enters main. To do this
+type break main (b main) followed by run (r). Execution will pause at main().
+From here you can view the surrounding memory with the x command. This command
+uses the format "x /[number][format][size] address". The default number is 1,
+default format is hex (x), and default size is word (w). My program paused at
+0x080484d6, and disassemble /r main shows the opcodes there are 83 ec 14. When
+I run "x /3b 0x080484d6" I see "0x80484d6 <main+14>:    0x83    0xec    0x14".
+
+Now say I want to examine the arguments to sum() being passed on the stack.
+Look at the output of "disassemble main" to see where the arguments are pushed
+onto the stack. My output has "0x08048515 <+77>:    52      push   edx", so
+I'll run "break *0x08048515" to set a breakpoint there. The * is necessary
+because this is a memory address, not a symbol like main. Then I'll run
+"continue" (c) to resume execution until just before the push (you'll notice
+you have to enter the numbers to be added. Choose 256 256).
+
+Now execution has paused just before the push instruction. There are a few ways
+to view the stack from here. First we need the address stored in the esp
+register. We can run "info registers" to see the values of each register, or
+"info register esp" to see just the value of esp. When I run "info register
+esp" I see "esp            0xffffcf98       0xffffcf98". Therefore I can view
+the first 12 words (4-byte-chunks) on the stack with "x /12xw *0xffffcf98". My
+output is below.
+
+0xffffcf98:     0xffffcfa4      0x080485ab      0x00000100      0x00000100
+0xffffcfa8:     0xffffd06c      0xdf002f00      0xf7fa73dc      0xffffcfd0
+0xffffcfb8:     0x00000000      0xf7e0d637      0xf7fa7000      0xf7fa7000
+
+This is one way to view the stack, but there's actually a much simpler one. You
+can run "x/12xw $esp" to acheive the same result.
+
+Now lets watch the first argument get pushed onto the stack. I can check the
+next few commands to be run with "x/10i $eip" or "x/10i $pc". To execute a
+single instruction, run "nexti" (ni). Now run "x/12x $esp" again. Notice that
+the first number you entered is now on the top of the stack. If you entered
+256, the top of the stack will be 0x00000100.
+
+To see the next argument be pushed onto the stack, run nexti/ni again followed
+by "x /12x $esp". The top of the stack will now have two words with the value
+0x00000100. If you run "x/10i $pc" again, you'll see that the next instruction
+is the call to sum(). If you run "nexti" again, gdb will simply execute the
+call to sum and continue when it finishes back in main(). We will step into the
+call by running "stepi" (si) then view the new instructions with "x/10i $pc".
+
+(gdb) x/10i $pc
+=> 0x80484bb <sum>:     push   ebp
+   0x80484bc <sum+1>:   mov    ebp,esp
+   0x80484be <sum+3>:   mov    edx,DWORD PTR [ebp+0x8]
+   0x80484c1 <sum+6>:   mov    eax,DWORD PTR [ebp+0xc]
+   0x80484c4 <sum+9>:   add    eax,edx
+   0x80484c6 <sum+11>:  pop    ebp
+   0x80484c7 <sum+12>:  ret
+   0x80484c8 <main>:    lea    ecx,[esp+0x4]
+   0x80484cc <main+4>:  and    esp,0xfffffff0
+   0x80484cf <main+7>:  push   DWORD PTR [ecx-0x4]
+
+The code for this function is simple enough to be read directly! A new stack
+frame is set up, the arguments ([ebp+0x8] and [ebp+0xc]) are loaded into
+registers, and they are added, with the result going into eax. Just to verify
+our intuition, pause before the first mov instruction, "mov    edx,DWORD PTR
+[ebp+0x8]". You could do this with a breakpoint, but you could also run
+nexti/ni twice (protip: if you press enter at the gdb prompt with no input, the
+previous command is run again). Then run "x/x $ebp+0x8" and "x/x $ebp+0xc". As
+expected, they contain the earlier input. From here you can poke around more if
+you like, or finish the program with continue (c). Then run "quit" (q) to exit
+gdb.
+
+Now gdb is a great tool and I highly recommend becoming proficient with it, but
+the learning curve is admittedly a little steep. There are countless extensions
+to gdb out there, and for this class we're going to use one called voltron,
+both because it's a great tool and because your instructor has contributed to
+it. To use voltron, first split your terminal into 4 panes. One one, run
+"gdb-voltron adder" (note that this is an alias). From the others, run "voltron
+view disasm", "voltron view registers", and "voltron view stack". Then back in
+the pane with gdb run "break main" followed by "run" (or just "start") and
+watch gdb turn into a graphical debugger before your eyes!
+
+From here, we'll try some crackmes.
+
+https://github.com/snare/voltron

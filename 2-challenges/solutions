@@ -1,0 +1,78 @@
+    crackme0x00a:
+With a hex editor:
+Use disassemble main in gdb. The program uses strcmp + jne to
+test the users password. Replace the machine code for jne with two nops (90 90)
+in a hex editor. Then simply run the edited version. Note that there is no need
+to find the actual password.
+
+With strings:
+Look for suspicious strings in the output of strings.
+
+    crackme0x00b:
+With a hex editor:
+Same as above.
+
+With strings:
+Use strings -e L to search for strings with wide characters.
+
+    crackme0x01:
+Run gdb -batch ./crackme0x01 -ex 'disass main'. The important
+part of the program is:
+   0x08048418 <+52>:    lea    -0x4(%ebp),%eax
+   0x0804841b <+55>:    mov    %eax,0x4(%esp)
+   0x0804841f <+59>:    movl   $0x804854c,(%esp)
+   0x08048426 <+66>:    call   0x804830c <scanf@plt>
+   0x0804842b <+71>:    cmpl   $0x149a,-0x4(%ebp)
+   0x08048432 <+78>:    je     0x8048442 <main+94>
+The input from scanf (with unknown format string) is compared to
+the constant 0x149a. The simplest first attempt is to guess the
+decimal value of 0x149a, which is 5274.
+
+    crackme0x02:
+Disassemble the binary. The important part is:
+   # Take input from the user
+   0x08048418 <+52>:    lea    eax,[ebp-0x4]
+   0x0804841b <+55>:    mov    DWORD PTR [esp+0x4],eax
+   0x0804841f <+59>:    mov    DWORD PTR [esp],0x804856c
+   0x08048426 <+66>:    call   0x804830c <scanf@plt>
+
+   # Move data around
+   0x0804842b <+71>:    mov    DWORD PTR [ebp-0x8],0x5a
+   0x08048433 <+78>:    mov    DWORD PTR [ebp-0xc],0x1ec
+   0x08048439 <+85>:    mov    edx,DWORD PTR [ebp-0xc]
+   0x0804843c <+88>:    lea    eax,[ebp-0x8]
+   0x0804843f <+91>:    add    DWORD PTR [eax],edx
+   0x08048441 <+93>:    mov    eax,DWORD PTR [ebp-0x8]
+   0x08048444 <+96>:    imul   eax,DWORD PTR [ebp-0x8]
+   0x08048448 <+100>:   mov    DWORD PTR [ebp-0xc],eax
+   0x0804844b <+103>:   mov    eax,DWORD PTR [ebp-0x4]
+
+   # Compare the input to the constant constructed earlier
+   0x0804844e <+106>:   cmp    eax,DWORD PTR [ebp-0xc]
+   0x08048451 <+109>:   jne    0x8048461 <main+125>
+
+First scanf is called with some pointer as the first argument
+(presumably to a format string) and the memory address
+ebp-0x4 as the second argument. So ebp-0x4 stores a
+pointer to our input. In the mess of instructions that follows,
+that pointer is never dereferenced or modified. We then compare
+our input to the (constant) value located at ebp-0xc, and jump
+if the two are different. But since [ebp-0xc] is constant, we
+can simply break just before the comparison, check its value,
+and enter that as our password. [ebp-0xc] is 0x00052b24, which
+is 338724 in decimal. 
+
+    crackme0x03:
+Same as above, but the comparison happens inside a function
+call.
+
+    crackme0x04:
+Input is taken and handed to check(). check() then checks
+whether any prefix of the string sums to 15. If a non-digit
+character appears in the input, the value of the last digit
+character is added instead. If the first character is not a
+digit, a garbage value is added and the password will almost
+certainly fail. The annotated code is in crackme0x04_check.dis.
+
+    crackme0x05:
+Same as above, but the target sum is 17.

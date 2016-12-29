@@ -1,0 +1,44 @@
+1. Language of Linux
+    * C Primer
+    * Assembly Primer (reading only)
+        * Registers
+        * cdecl
+    * ELF Format
+        * ELF-Walkthrough.png
+        * readelf
+        * objdump
+        * nm
+    * Reverse Engineering Tools
+        * file
+        * objdump
+        * strings
+        * strace, ltrace, xtrace
+        * shellnoob
+        * hex editor
+    * GDB
+        * break
+        * run
+        * continue
+        * x
+        * nexti
+        * stepi
+        * voltron
+2. Various crackmes
+    * radare2
+    * crackmes
+    * Binary bomb
+    * Writing / changing an assembly program
+    * Binary modification (1hr)
+3. Exploitation
+    * LD_PRELOAD / LD_LIBRARY_PATH
+    * Memory corruption, overwriting variables
+    * stack-based buffer overflow
+    * jump to function
+    * format string bugs
+4. Exploitation II
+    * shellcode + NOP sled
+    * heap overflow
+    * stack canaries
+    * DEP/ROP
+    * GOT/PLT
+5. Competition(?)
